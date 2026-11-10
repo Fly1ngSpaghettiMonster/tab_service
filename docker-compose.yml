@@ -1,0 +1,38 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tab
+      POSTGRES_USER: tab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - tab-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tab -d tab"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # No ports: the database is only reachable from the api container.
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Db: "Host=db;Database=tab;Username=tab;Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable"
+      Tab__ApiKey: ${TAB_API_KEY:?Set TAB_API_KEY in .env}
+      Tab__AdminKey: ${TAB_ADMIN_KEY:-}
+      Tab__PublicViewerUrl: ${TAB_PUBLIC_VIEWER_URL:-https://tab.aabder.xyz/view}
+      Tab__AllowedOrigins: ${TAB_ALLOWED_ORIGINS:-}
+      Tab__RetentionDays: ${TAB_RETENTION_DAYS:-60}
+    ports:
+      # Only Nginx Proxy Manager should reach this port. If NPM runs in Docker on the same host,
+      # you can instead put both on a shared network and drop this mapping.
+      - "${TAB_HTTP_PORT:-8080}:8080"
+
+volumes:
+  tab-db:
